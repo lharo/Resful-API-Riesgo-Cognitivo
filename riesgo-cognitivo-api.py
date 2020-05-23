@@ -38,7 +38,7 @@ def upload():
     file.save(os.path.join('tmp\\img', filename))
     url = upload_file_to_gcs('tmp\\img', filename, filename)
     os.remove(os.path.join('tmp/img', filename))
-    return jsonify({'url':url})
+    return url
     
 #Call Google Client API with bucket URI for image
 
@@ -61,7 +61,7 @@ def upload_file_to_gcs(local_path, local_file_name, target_key):
         bucket = client.bucket(bucketName)
         full_file_path = os.path.join(local_path, local_file_name)
         bucket.blob(imgFolder + target_key).upload_from_filename(full_file_path)
-        return bucket.blob(target_key).public_url
+        return jsonify({'url': bucket.blob(target_key).public_url , 'uri' : 'gs://' + bucketName + '/' + imgFolder + target_key})
 
     except Exception as e:
         print(e)
