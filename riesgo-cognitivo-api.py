@@ -1,4 +1,6 @@
 import os
+import base64
+import json
 
 from google.cloud import storage
 from googleapiclient.discovery import build
@@ -16,6 +18,8 @@ ofac = pd.read_csv(ofacDatasetPath)
 ofac = ofac.loc[:, ~ofac.columns.str.contains('^Unnamed')]
 sat = pd.read_csv(satDatasetPath)
 sat = sat.loc[:, ~sat.columns.str.contains('^Unnamed')]
+sat.rename(columns={'RAZÓN SOCIAL': 'Razon_Social'}, inplace=True)
+
 imgFolder = 'img/app-uploads/'
 
 # Get structure of datasets
@@ -41,18 +45,65 @@ def upload():
     return url
     
 #Call Google Client API with bucket URI for image
+@app.route('/riesgo-cognitivo-api/v1.0/identify-image/<string:uri>', methods=['GET'])
+def identify_image(uri):
+    IMAGE = 'gs://' + bucketName + '/' + imgFolder + uri
+    vservice = build('vision', 'v1', developerKey=APIKEY)
+    request = vservice.images().annotate(body={
+        'requests': [{
+        'image': {
+            'source': {
+                'gcs_image_uri': IMAGE
+            }
+        },
+        'features': [{
+            'type': 'TEXT_DETECTION',
+            'maxResults': 3,
+            }]
+        }],
+    })
+    responses = request.execute(num_retries=3)
+    try:
+        api_text = (responses['responses'][0]['textAnnotations'][0]['description'])
+        start = api_text.find("NOMBRE") + len("NOMBRE")
+        end = api_text.find("DOMICILIO")
+        name = api_text[start:end]
+        name = name.replace("\n", " ")
+        """
+        api_array = api_text.splitlines()
+        name_like_variable = difflib.get_close_matches('NOMBRE', api_array)
+        address_like_variable = difflib.get_close_matches('DOMICILIO', api_array)
+        name_like_variable_idx = api_array.index(''.join(name_like_variable))
+        address_like_variable_idx = api_array.index(''.join(address_like_variable))
+
+        name = ''
+        i = name_like_variable_idx + 1
+        while i < address_like_variable_idx:
+            name += api_array[i] + " "
+            i += 1
+        """
+        return jsonify({'name': name}, {'error':False})
+    except Exception as e:
+    # TODO Control Messaging for errors
+        return jsonify({'error':True, 'uri': IMAGE,'message': responses['responses'][0]['textAnnotations'][0]})
 
 #Call query to search for name on both datasets
-
-# TODO Migrate to Big Query
+#TODO Migrate to Big Query
 # Regular expression Functions
+#On client side use %20
+@app.route('/riesgo-cognitivo-api/v1.0/check-ofac/<string:name>', methods=['GET'])
+def check_ofac(name):
+    df = ofac[ofac.SDN_Name == name]
+    res = df.to_dict(orient='records')
+    return json.dumps(res)
 
-def ofac_check(w):
-    print (ofac[ofac['SDN_Name'].astype(str).str.contains(w)])
-
-def sat_check(w):
-    print (sat[sat['RAZÓN SOCIAL'].astype(str).str.contains(w)])
-
+#On client side use %20
+@app.route('/riesgo-cognitivo-api/v1.0/check-sat/<string:name>', methods=['GET'])
+def check_sat(name):
+    df = sat[sat.Razon_Social == name]
+    res = df.to_dict(orient='records')
+    return json.dumps(res)
+    
 #Save image to GCS
 def upload_file_to_gcs(local_path, local_file_name, target_key):
     try:
@@ -60,8 +111,10 @@ def upload_file_to_gcs(local_path, local_file_name, target_key):
             pathToCredentials)
         bucket = client.bucket(bucketName)
         full_file_path = os.path.join(local_path, local_file_name)
-        bucket.blob(imgFolder + target_key).upload_from_filename(full_file_path)
-        return jsonify({'url': bucket.blob(target_key).public_url , 'uri' : 'gs://' + bucketName + '/' + imgFolder + target_key})
+        blob = bucket.blob(imgFolder + target_key)
+        blob.upload_from_filename(full_file_path)
+        blob.make_public()
+        return jsonify({'url': bucket.blob(target_key).public_url , 'uri' : 'gs://' + bucketName + '/' + imgFolder + target_key , 'imgName' : target_key })
 
     except Exception as e:
         print(e)
