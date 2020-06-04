@@ -5,14 +5,14 @@ import json
 from google.cloud import storage
 from googleapiclient.discovery import build
 
-from flask import Flask, jsonify, abort, make_response, request, url_for, Response
+from flask import Flask, jsonify, abort, make_response, request, url_for, Response, redirect
 from pandas import pandas as pd
 
 from configs import ofacDatasetPath, satDatasetPath, APIKEY, pathToCredentials, bucketName
 
 #TODO Remove unnecesary imports
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="dist/angular-blog-clean", static_url_path="")
 
 ofac = pd.read_csv(ofacDatasetPath)
 ofac = ofac.loc[:, ~ofac.columns.str.contains('^Unnamed')]
@@ -21,6 +21,14 @@ sat = sat.loc[:, ~sat.columns.str.contains('^Unnamed')]
 sat.rename(columns={'RAZÓN SOCIAL': 'Razon_Social'}, inplace=True)
 
 imgFolder = 'img/app-uploads/'
+
+@app.route("/")
+def home():
+ return make_response(open('dist/angular-blog-clean/index.html').read())
+
+@app.route("/home")
+def homeroot():
+ return redirect("/")
 
 # Get structure of datasets
 @app.route('/riesgo-cognitivo-api/v1.0/datasets/<string:dataset>', methods=['GET'])
