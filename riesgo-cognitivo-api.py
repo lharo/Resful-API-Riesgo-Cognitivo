@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from flask import Flask, jsonify, abort, make_response, request, url_for, Response, redirect
 from pandas import pandas as pd
 
-from configs import ofacDatasetPath, satDatasetPath, APIKEY, pathToCredentials, bucketName
+from configs import ofacDatasetPath, satDatasetPath, APIKEY, pathToCredentials, bucketName, tmpLink
 
 #TODO Remove unnecesary imports
 
@@ -47,9 +47,9 @@ def get_dataset(dataset):
 def upload():
     file = request.files['file']
     filename = file.filename
-    file.save(os.path.join('tmp\\img', filename))
-    url = upload_file_to_gcs('tmp\\img', filename, filename)
-    os.remove(os.path.join('tmp/img', filename))
+    file.save(os.path.join(tmpLink, filename))
+    url = upload_file_to_gcs(tmpLink, filename, filename)
+    os.remove(os.path.join(tmpLink, filename))
     return url
     
 #Call Google Client API with bucket URI for image
